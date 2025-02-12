@@ -48,6 +48,7 @@
             }
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
 </head>
 <body class="min-h-screen bg-gray-50">
     <div class="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-8">
@@ -115,6 +116,7 @@
         const mobileView = document.getElementById('mobileView');
         const loadingIndicator = document.getElementById('loading');
         let allData = []; // Store all data for searching
+        let fuse; // Declare fuse globally
 
         function createRow(result) {
             const responseObj = result.responseObject;
@@ -199,25 +201,35 @@
             row.classList.remove('blur-loading');
         }
 
-        function handleSearch(query) {
-            query = query.toLowerCase();
-            let filteredData = allData.filter(result => {
-                const obj = result.responseObject;
-                return (
-                    obj.applicationNumber.toLowerCase().includes(query) ||
-                    obj.name.toLowerCase().includes(query) ||
-                    obj.currentStatus.toLowerCase().includes(query) ||
-                    obj.state.toLowerCase().includes(query) ||
-                    obj.district.toLowerCase().includes(query) ||
-                    obj.category.toLowerCase().includes(query) ||
-                    obj.subCategory.toLowerCase().includes(query) ||
-                    obj.userId.toLowerCase().includes(query)
-                );
-            });
+        function initializeFuseSearch(data) {
+            const options = {
+                keys: [
+                    { name: 'responseObject.applicationNumber', weight: 2 },
+                    { name: 'responseObject.name', weight: 2 },
+                    { name: 'responseObject.currentStatus', weight: 1.5 },
+                    'responseObject.state',
+                    'responseObject.district',
+                    'responseObject.category',
+                    'responseObject.subCategory',
+                    'responseObject.userId'
+                ],
+                threshold: 0.3,
+                ignoreLocation: true,
+                minMatchCharLength: 2
+            };
+            fuse = new Fuse(data, options);
+        }
 
-            // Update views with filtered data
-            applicationTable.innerHTML = filteredData.map(result => createRow(result)).join('');
-            mobileView.innerHTML = filteredData.map(result => createMobileCard(result)).join('');
+        function handleSearch(query) {
+            if (!query) {
+                applicationTable.innerHTML = allData.map(result => createRow(result)).join('');
+                mobileView.innerHTML = allData.map(result => createMobileCard(result)).join('');
+                return;
+            }
+
+            const results = fuse.search(query).map(result => result.item);
+            applicationTable.innerHTML = results.map(result => createRow(result)).join('');
+            mobileView.innerHTML = results.map(result => createMobileCard(result)).join('');
         }
 
         async function refreshAllData() {
@@ -227,9 +239,9 @@
             try {
                 const response = await fetch('/api/batch-status');
                 const data = await response.json();
-                allData = data; // Store data for search
+                allData = data;
+                initializeFuseSearch(data); // Initialize fuse with new data
                 
-                // Update views
                 applicationTable.innerHTML = data.map(result => createRow(result)).join('');
                 mobileView.innerHTML = data.map(result => createMobileCard(result)).join('');
             } catch (error) {
