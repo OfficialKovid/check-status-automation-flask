@@ -1,1 +1,24 @@
-venv
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.env
+
+# Flask instance and config
+instance/
+*.log
+config.py
+config.yaml
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# IDE/editor-specific files
+.vscode/
+*.swp
+*.swo

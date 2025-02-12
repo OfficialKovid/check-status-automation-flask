@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Application Status Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+        .transition-all {
+            transition: all 0.3s ease;
+        }
+        .table-container {
+            overflow-x: auto;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .status-pill {
+            padding: 0.375rem 0.75rem;
+            border-radius: 9999px;
+            font-weight: 500;
+            font-size: 0.875rem;
+            display: inline-block;
+        }
+        .refresh-button {
+            transition: all 0.2s ease;
+        }
+        .refresh-button:hover {
+            transform: rotate(180deg);
+        }
+        .blur-loading {
+            filter: blur(2px);
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        @media (max-width: 640px) {
+            .table-container {
+                margin: 0 -1rem;
+                border-radius: 0;
+            }
+            .status-pill {
+                padding: 0.25rem 0.5rem;
+                font-size: 0.75rem;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gray-50">
+    <div class="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-8">
+        <!-- Header Section -->
+        <div class="mb-4 sm:mb-8 space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <h1 class="text-xl sm:text-2xl font-bold text-gray-900">Application Status Dashboard</h1>
+                <button onclick="refreshAllData()" 
+                        class="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg shadow-sm flex items-center justify-center gap-2 transition-all">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    <span>Refresh All</span>
+                </button>
+            </div>
+            
+            <!-- Search Bar -->
+            <div class="relative">
+                <input type="text" 
+                       id="searchInput"
+                       placeholder="Search by application number, name, state..."
+                       class="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                       onkeyup="handleSearch(this.value)">
+                <span class="absolute right-3 top-2.5 text-gray-400">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                </span>
+            </div>
+        </div>
+
+        <div id="loading" class="hidden">
+            <div class="flex justify-center items-center p-4">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+            </div>
+        </div>
+
+        <!-- Mobile View: Cards -->
+        <div class="block sm:hidden space-y-4" id="mobileView"></div>
+
+        <!-- Desktop View: Table -->
+        <div class="hidden sm:block table-container bg-white">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead>
+                    <tr class="bg-gray-50">
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Application No.</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submission Date</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User ID</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">State</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">District</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sub Category</th>
+                    </tr>
+                </thead>
+                <tbody id="applicationTable" class="bg-white divide-y divide-gray-200"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const applicationTable = document.getElementById('applicationTable');
+        const mobileView = document.getElementById('mobileView');
+        const loadingIndicator = document.getElementById('loading');
+        let allData = []; // Store all data for searching
+
+        function createRow(result) {
+            const responseObj = result.responseObject;
+            return `
+                <tr class="hover:bg-gray-50 transition-all">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                        <button onclick="refreshRow('${responseObj.applicationNumber}', this)" 
+                                class="refresh-button text-indigo-600 hover:text-indigo-900">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                        </button>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${responseObj.applicationNumber}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="status-pill" style="background-color: ${responseObj.bgColor}; color: ${responseObj.color}">
+                            ${responseObj.currentStatus}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${responseObj.submitTime || 'N/A'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${responseObj.userId.trim()}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${responseObj.name}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${responseObj.state}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${responseObj.district}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${responseObj.category}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${responseObj.subCategory}</td>
+                </tr>
+            `;
+        }
+
+        function createMobileCard(result) {
+            const responseObj = result.responseObject;
+            return `
+                <div class="bg-white rounded-lg shadow p-4 space-y-3">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <div class="font-medium">${responseObj.applicationNumber}</div>
+                            <div class="text-sm text-gray-500">${responseObj.submitTime || 'N/A'}</div>
+                        </div>
+                        <button onclick="refreshRow('${responseObj.applicationNumber}', this)" 
+                                class="refresh-button text-indigo-600 p-1">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <div>
+                        <span class="status-pill" style="background-color: ${responseObj.bgColor}; color: ${responseObj.color}">
+                            ${responseObj.currentStatus}
+                        </span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-sm">
+                        <div class="text-gray-500">Name:</div>
+                        <div>${responseObj.name}</div>
+                        <div class="text-gray-500">User ID:</div>
+                        <div>${responseObj.userId.trim()}</div>
+                        <div class="text-gray-500">State:</div>
+                        <div>${responseObj.state}</div>
+                        <div class="text-gray-500">District:</div>
+                        <div>${responseObj.district}</div>
+                        <div class="text-gray-500">Category:</div>
+                        <div>${responseObj.category}</div>
+                        <div class="text-gray-500">Sub Category:</div>
+                        <div>${responseObj.subCategory}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function refreshRow(applicationNumber, button) {
+            const row = button.closest('tr');
+            row.classList.add('blur-loading');
+            try {
+                const response = await fetch(`/api/status/${applicationNumber}`);
+                const result = await response.json();
+                if (result) {
+                    row.outerHTML = createRow(result);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+            }
+            row.classList.remove('blur-loading');
+        }
+
+        function handleSearch(query) {
+            query = query.toLowerCase();
+            let filteredData = allData.filter(result => {
+                const obj = result.responseObject;
+                return (
+                    obj.applicationNumber.toLowerCase().includes(query) ||
+                    obj.name.toLowerCase().includes(query) ||
+                    obj.currentStatus.toLowerCase().includes(query) ||
+                    obj.state.toLowerCase().includes(query) ||
+                    obj.district.toLowerCase().includes(query) ||
+                    obj.category.toLowerCase().includes(query) ||
+                    obj.subCategory.toLowerCase().includes(query) ||
+                    obj.userId.toLowerCase().includes(query)
+                );
+            });
+
+            // Update views with filtered data
+            applicationTable.innerHTML = filteredData.map(result => createRow(result)).join('');
+            mobileView.innerHTML = filteredData.map(result => createMobileCard(result)).join('');
+        }
+
+        async function refreshAllData() {
+            applicationTable.classList.add('blur-loading');
+            mobileView.classList.add('blur-loading');
+            loadingIndicator.classList.remove('hidden');
+            try {
+                const response = await fetch('/api/batch-status');
+                const data = await response.json();
+                allData = data; // Store data for search
+                
+                // Update views
+                applicationTable.innerHTML = data.map(result => createRow(result)).join('');
+                mobileView.innerHTML = data.map(result => createMobileCard(result)).join('');
+            } catch (error) {
+                console.error('Error:', error);
+            }
+            applicationTable.classList.remove('blur-loading');
+            mobileView.classList.remove('blur-loading');
+            loadingIndicator.classList.add('hidden');
+        }
+
+        // Initial load
+        refreshAllData();
+    </script>
+</body>
+</html>
